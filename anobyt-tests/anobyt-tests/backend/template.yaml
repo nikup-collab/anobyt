@@ -1,0 +1,56 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Anobyt coding tests - Lambda + DynamoDB (stays inside always-free limits)
+
+Parameters:
+  JwtSecret:
+    Type: String
+    NoEcho: true
+    MinLength: 32
+    Description: Long random string used to sign login tokens
+  AllowedOrigin:
+    Type: String
+    Default: https://anobyt.in
+    Description: Your site origin (no trailing slash)
+
+Resources:
+  Table:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: anobyt-tests
+      BillingMode: PROVISIONED
+      ProvisionedThroughput:
+        ReadCapacityUnits: 20     # always-free allowance is 25 + 25 per account/region
+        WriteCapacityUnits: 20
+      AttributeDefinitions:
+        - { AttributeName: PK, AttributeType: S }
+        - { AttributeName: SK, AttributeType: S }
+      KeySchema:
+        - { AttributeName: PK, KeyType: HASH }
+        - { AttributeName: SK, KeyType: RANGE }
+
+  Api:
+    Type: AWS::Serverless::Function
+    Properties:
+      Runtime: nodejs20.x
+      Handler: index.handler
+      CodeUri: src/
+      MemorySize: 512
+      Timeout: 10
+      Environment:
+        Variables:
+          TABLE: !Ref Table
+          JWT_SECRET: !Ref JwtSecret
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref Table }
+      FunctionUrlConfig:
+        AuthType: NONE
+        Cors:
+          AllowOrigins: [!Ref AllowedOrigin, 'http://localhost:5173']
+          AllowMethods: [GET, POST]
+          AllowHeaders: [content-type, authorization]
+          MaxAge: 86400
+
+Outputs:
+  ApiUrl:
+    Value: !GetAtt ApiUrl.FunctionUrl
